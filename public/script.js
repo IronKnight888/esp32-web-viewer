@@ -2,20 +2,40 @@ let scene, camera, renderer, cube;
 
 function init() {
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+  camera = new THREE.PerspectiveCamera(
+    70,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  camera.position.z = 5;
+
   renderer = new THREE.WebGLRenderer({
     canvas: document.getElementById("scene"),
-    antialias: true
+    antialias: true,
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
 
+  // Cube with smooth material
   const geometry = new THREE.BoxGeometry(1, 2, 0.5);
-  const material = new THREE.MeshNormalMaterial();
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x6699ff,
+    metalness: 0.3,
+    roughness: 0.4,
+  });
   cube = new THREE.Mesh(geometry, material);
   scene.add(cube);
 
-  camera.position.z = 5;
+  // Lighting
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(3, 3, 3);
+  scene.add(light);
+
+  const ambient = new THREE.AmbientLight(0x404040); // soft light
+  scene.add(ambient);
+
   animate();
 }
 
@@ -24,31 +44,22 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-function applyRotation(eulerDeg) {
-  const [x, y, z] = eulerDeg.map(deg => deg * Math.PI / 180);
-  const euler = new THREE.Euler(y, x, z); // Note: apply in YXZ order to match BNO055
-  cube.setRotationFromEuler(euler);
-
-  // 🔄 Output quaternion to console
-  const q = cube.quaternion;
-  console.log({
-    x: q.x.toFixed(4),
-    y: q.y.toFixed(4),
-    z: q.z.toFixed(4),
-    w: q.w.toFixed(4)
-  });
+function applyQuaternion([x, y, z, w]) {
+  cube.quaternion.set(x, y, z, w);
 }
 
 init();
 
-const socket = new WebSocket(`wss://${location.host}`);
+// Connect to WebSocket
+const socket = new WebSocket(`wss://${location.host}/ws`);
+socket.onopen = () => console.log("✅ WebSocket connected");
 socket.onmessage = (event) => {
   try {
     const data = JSON.parse(event.data);
-    if (data.joint === "cube" || data.euler) {
-      applyRotation(data.euler || [0, 0, 0]);
+    if (data.joint === "cube" && Array.isArray(data.quat)) {
+      applyQuaternion(data.quat);
     }
   } catch (e) {
-    console.error("Bad data", event.data);
+    console.error("Bad WebSocket data:", event.data);
   }
 };
