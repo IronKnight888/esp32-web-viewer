@@ -20,21 +20,24 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-function applyRotation(euler) {
-  const [x, y, z] = euler.map(deg => deg * Math.PI / 180);
-  cube.rotation.set(y, x, z);
+function applyRotationFromIMU(data) {
+  if (!("x" in data && "y" in data && "z" in data)) return;
+  const x = parseFloat(data.x) * Math.PI / 180;
+  const y = parseFloat(data.y) * Math.PI / 180;
+  const z = parseFloat(data.z) * Math.PI / 180;
+  cube.rotation.set(x, y, z);
 }
 
 init();
 
-const socket = new WebSocket(`wss://${location.host}`);
+// Connect to WebSocket on same host
+const socket = new WebSocket(`wss://${location.host}/ws`);
+
 socket.onmessage = (event) => {
   try {
     const data = JSON.parse(event.data);
-    if (data.joint === "cube") {
-      applyRotation(data.euler);
-    }
+    applyRotationFromIMU(data);
   } catch (e) {
-    console.error("Bad data", event.data);
+    console.error("Invalid data received:", event.data);
   }
 };
