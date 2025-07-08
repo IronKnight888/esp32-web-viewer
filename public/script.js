@@ -3,8 +3,12 @@ let scene, camera, renderer, cube;
 function init() {
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("scene") });
+  renderer = new THREE.WebGLRenderer({
+    canvas: document.getElementById("scene"),
+    antialias: true
+  });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
 
   const geometry = new THREE.BoxGeometry(1, 2, 0.5);
   const material = new THREE.MeshNormalMaterial();
@@ -20,24 +24,31 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-function applyRotationFromIMU(data) {
-  if (!("x" in data && "y" in data && "z" in data)) return;
-  const x = parseFloat(data.x) * Math.PI / 180;
-  const y = parseFloat(data.y) * Math.PI / 180;
-  const z = parseFloat(data.z) * Math.PI / 180;
-  cube.rotation.set(x, y, z);
+function applyRotation(eulerDeg) {
+  const [x, y, z] = eulerDeg.map(deg => deg * Math.PI / 180);
+  const euler = new THREE.Euler(y, x, z); // Note: apply in YXZ order to match BNO055
+  cube.setRotationFromEuler(euler);
+
+  // 🔄 Output quaternion to console
+  const q = cube.quaternion;
+  console.log({
+    x: q.x.toFixed(4),
+    y: q.y.toFixed(4),
+    z: q.z.toFixed(4),
+    w: q.w.toFixed(4)
+  });
 }
 
 init();
 
-// Connect to WebSocket on same host
-const socket = new WebSocket(`wss://${location.host}/ws`);
-
+const socket = new WebSocket(`wss://${location.host}`);
 socket.onmessage = (event) => {
   try {
     const data = JSON.parse(event.data);
-    applyRotationFromIMU(data);
+    if (data.joint === "cube" || data.euler) {
+      applyRotation(data.euler || [0, 0, 0]);
+    }
   } catch (e) {
-    console.error("Invalid data received:", event.data);
+    console.error("Bad data", event.data);
   }
 };
